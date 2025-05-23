@@ -99,7 +99,11 @@ func (b *BlockGen) AddTxWithChain(bc *BlockChain, tx *types.Transaction) {
 	if b.gasPool == nil {
 		b.SetCoinbase(common.Address{})
 	}
-	feeCapacity := state.GetTRC21FeeCapacityFromState(b.statedb)
+	var contracts []common.Address = make([]common.Address, 0)
+	if tx.To() != nil {
+		contracts = append(contracts, *tx.To())
+	}
+	feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(b.statedb, contracts)
 	b.statedb.Prepare(tx.Hash(), common.Hash{}, len(b.txs))
 	receipt, gas, err, tokenFeeUsed := ApplyTransaction(b.config, feeCapacity, bc, &b.header.Coinbase, b.gasPool, b.statedb, nil, b.header, tx, &b.header.GasUsed, vm.Config{})
 	if err != nil {

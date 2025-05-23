@@ -2,9 +2,10 @@ package state
 
 import (
 	"bytes"
-	"github.com/hashicorp/golang-lru"
-	"github.com/tomochain/tomochain/common"
 	"math/big"
+
+	lru "github.com/hashicorp/golang-lru"
+	"github.com/tomochain/tomochain/common"
 )
 
 var (
@@ -61,6 +62,37 @@ func GetTRC21FeeCapacityFromState(statedb *StateDB) map[common.Address]*big.Int 
 		}
 	}
 	return tokensCapacity
+}
+
+func GetTRC21FeeCapacityFromStateEffective(statedb *StateDB, contracts []common.Address) map[common.Address]*big.Int {
+	if statedb == nil {
+		return map[common.Address]*big.Int{}
+	}
+	tokensCapacity := map[common.Address]*big.Int{}
+	slotTokensState := SlotTRC21Issuer["tokensState"]
+
+	for _, contract := range contracts {
+		balanceKey := GetLocMappingAtKey(contract.Hash(), slotTokensState)
+		balanceHash := statedb.GetState(common.TRC21IssuerSMC, common.BigToHash(balanceKey))
+		if balanceHash.Big().Cmp(big.NewInt(0)) == 0 {
+			continue
+		}
+		tokensCapacity[contract] = balanceHash.Big()
+	}
+	return tokensCapacity
+}
+
+func GetTRC21FeeCapacityByAddress(statedb *StateDB, contract common.Address) *big.Int {
+	if statedb == nil {
+		return nil
+	}
+	slotTokensState := SlotTRC21Issuer["tokensState"]
+	balanceKey := GetLocMappingAtKey(contract.Hash(), slotTokensState)
+	balanceHash := statedb.GetState(common.TRC21IssuerSMC, common.BigToHash(balanceKey))
+	if balanceHash.Big().Cmp(big.NewInt(0)) == 0 {
+		return nil
+	}
+	return balanceHash.Big()
 }
 
 func PayFeeWithTRC21TxFail(statedb *StateDB, from common.Address, token common.Address) {

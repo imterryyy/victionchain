@@ -1669,7 +1669,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 				}
 			}
 		}
-		feeCapacity := state.GetTRC21FeeCapacityFromStateWithCache(parent.Root(), statedb)
+		var contractList []common.Address
+		for _, tx := range block.Transactions() {
+			if tx.To() != nil {
+				contractList = append(contractList, *tx.To())
+			}
+		}
+
+		feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(statedb, contractList)
 		// Process block using the parent state as reference point.
 		t0 := time.Now()
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, tradingState, bc.vmConfig, feeCapacity)
