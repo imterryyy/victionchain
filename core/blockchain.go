@@ -23,6 +23,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -558,7 +559,6 @@ func (bc *BlockChain) OrderStateAt(block *types.Block) (*tradingstate.TradingSta
 		}
 	}
 	return nil, errors.New("Get tomox state fail")
-
 }
 
 // LendingStateAt returns a new mutable state based on a particular point in time.
@@ -577,7 +577,6 @@ func (bc *BlockChain) LendingStateAt(block *types.Block) (*lendingstate.LendingS
 		}
 	}
 	return nil, errors.New("Get tomox state fail")
-
 }
 
 // Reset purges the entire blockchain, restoring it to its genesis state.
@@ -1644,7 +1643,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 						}
 					}
 				}
-				//check
+				// check
 				if tradingState != nil && tradingService != nil {
 					gotRoot := tradingState.IntermediateRoot()
 					expectRoot, _ := tradingService.GetTradingStateRoot(block, author)
@@ -1671,7 +1670,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		}
 		var contractList []common.Address
 		for _, tx := range block.Transactions() {
-			if tx.To() != nil {
+			if tx.To() != nil && !slices.Contains(contractList, *tx.To()) {
 				contractList = append(contractList, *tx.To())
 			}
 		}
@@ -1766,7 +1765,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			// epoch block
 			if (chain[i].NumberU64() % bc.chainConfig.Posv.Epoch) == 0 {
 				CheckpointCh <- 1
-
 			}
 			// prepare set of masternodes for the next epoch
 			if (chain[i].NumberU64() % bc.chainConfig.Posv.Epoch) == (bc.chainConfig.Posv.Epoch - bc.chainConfig.Posv.Gap) {
@@ -1889,7 +1887,7 @@ func (bc *BlockChain) getResultBlock(block *types.Block, verifiedM2 bool) (*Resu
 	}
 	// Create a new statedb using the parent block and report an
 	// error if it fails.
-	var parent = bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+	parent := bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
 	statedb, err := state.New(parent.Root(), bc.stateCache)
 	if err != nil {
 		return nil, err
@@ -2063,7 +2061,6 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		return events, coalescedLogs, nil
 	}
 	status, err := bc.WriteBlockWithState(block, result.receipts, result.state, result.tradingState, result.lendingState)
-
 	if err != nil {
 		return events, coalescedLogs, err
 	}
@@ -2114,7 +2111,6 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		// epoch block
 		if (block.NumberU64() % bc.chainConfig.Posv.Epoch) == 0 {
 			CheckpointCh <- 1
-
 		}
 		// prepare set of masternodes for the next epoch
 		if (block.NumberU64() % bc.chainConfig.Posv.Epoch) == (bc.chainConfig.Posv.Epoch - bc.chainConfig.Posv.Gap) {
@@ -2567,7 +2563,7 @@ func (bc *BlockChain) UpdateM1() error {
 		if err != nil {
 			return err
 		}
-		//TODO: smart contract shouldn't return "0x0000000000000000000000000000000000000000"
+		// TODO: smart contract shouldn't return "0x0000000000000000000000000000000000000000"
 		if candidate.String() != "0x0000000000000000000000000000000000000000" {
 			ms = append(ms, posv.Masternode{Address: candidate, Stake: v})
 		}
@@ -2622,7 +2618,7 @@ func (bc *BlockChain) logExchangeData(block *types.Block) {
 	}
 	start := time.Now()
 	defer func() {
-		//The deferred call's arguments are evaluated immediately, but the function call is not executed until the surrounding function returns
+		// The deferred call's arguments are evaluated immediately, but the function call is not executed until the surrounding function returns
 		// That's why we should put this log statement in an anonymous function
 		log.Debug("logExchangeData takes", "time", common.PrettyDuration(time.Since(start)), "blockNumber", block.NumberU64())
 	}()
@@ -2674,7 +2670,7 @@ func (bc *BlockChain) reorgTxMatches(deletedTxs types.Transactions, newChain typ
 	}
 	start := time.Now()
 	defer func() {
-		//The deferred call's arguments are evaluated immediately, but the function call is not executed until the surrounding function returns
+		// The deferred call's arguments are evaluated immediately, but the function call is not executed until the surrounding function returns
 		// That's why we should put this log statement in an anonymous function
 		log.Debug("reorgTxMatches takes", "time", common.PrettyDuration(time.Since(start)))
 	}()
@@ -2719,7 +2715,7 @@ func (bc *BlockChain) logLendingData(block *types.Block) {
 	}
 	start := time.Now()
 	defer func() {
-		//The deferred call's arguments are evaluated immediately, but the function call is not executed until the surrounding function returns
+		// The deferred call's arguments are evaluated immediately, but the function call is not executed until the surrounding function returns
 		// That's why we should put this log statement in an anonymous function
 		log.Debug("logLendingData takes", "time", common.PrettyDuration(time.Since(start)), "blockNumber", block.NumberU64())
 	}()
