@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -196,14 +197,11 @@ func (api *PrivateDebugAPI) traceChain(ctx context.Context, start, end *types.Bl
 			// Fetch and execute the next block trace tasks
 			for task := range tasks {
 				signer := types.MakeSigner(api.config, task.block.Number())
-				feeCapacity := state.GetTRC21FeeCapacityFromState(task.statedb)
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
 					var balance *big.Int
 					if tx.To() != nil {
-						if value, ok := feeCapacity[*tx.To()]; ok {
-							balance = value
-						}
+						balance = state.GetTRC21FeeCapacityByAddress(task.statedb, *tx.To())
 					}
 					msg, _ := tx.AsMessage(signer, balance, task.block.Number(), false)
 					vmctx := core.NewEVMContext(msg, task.block.Header(), api.eth.blockchain, nil)
@@ -287,7 +285,14 @@ func (api *PrivateDebugAPI) traceChain(ctx context.Context, start, end *types.Bl
 				}
 				traced += uint64(len(txs))
 			}
-			feeCapacity := state.GetTRC21FeeCapacityFromState(statedb)
+			var contractList []common.Address
+			for _, tx := range block.Transactions() {
+				if tx.To() != nil && !slices.Contains(contractList, *tx.To()) {
+					contractList = append(contractList, *tx.To())
+				}
+			}
+
+			feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(statedb, contractList)
 			// Generate the next state snapshot fast without tracing
 			_, _, _, err := api.eth.blockchain.Processor().Process(block, statedb, tomoxState, vm.Config{}, feeCapacity)
 			if err != nil {
@@ -435,12 +440,9 @@ func (api *PrivateDebugAPI) traceBlock(ctx context.Context, block *types.Block, 
 
 			// Fetch and execute the next transaction trace tasks
 			for task := range jobs {
-				feeCapacity := state.GetTRC21FeeCapacityFromState(task.statedb)
 				var balance *big.Int
 				if txs[task.index].To() != nil {
-					if value, ok := feeCapacity[*txs[task.index].To()]; ok {
-						balance = value
-					}
+					balance = state.GetTRC21FeeCapacityByAddress(task.statedb, *txs[task.index].To())
 				}
 				msg, _ := txs[task.index].AsMessage(signer, balance, block.Number(), false)
 				vmctx := core.NewEVMContext(msg, block.Header(), api.eth.blockchain, nil)
@@ -454,17 +456,13 @@ func (api *PrivateDebugAPI) traceBlock(ctx context.Context, block *types.Block, 
 			}
 		}()
 	}
-	// Feed the transactions into the tracers and return
-	feeCapacity := state.GetTRC21FeeCapacityFromState(statedb)
 	var failed error
 	for i, tx := range txs {
 		// Send the trace task over for execution
 		jobs <- &txTraceTask{statedb: statedb.Copy(), index: i}
 		var balance *big.Int
 		if tx.To() != nil {
-			if value, ok := feeCapacity[*tx.To()]; ok {
-				balance = value
-			}
+			balance = state.GetTRC21FeeCapacityByAddress(statedb, *tx.To())
 		}
 		// Generate the next state snapshot fast without tracing
 		msg, _ := tx.AsMessage(signer, balance, block.Number(), false)
@@ -543,7 +541,14 @@ func (api *PrivateDebugAPI) computeStateDB(block *types.Block, reexec uint64) (*
 		if block = api.eth.blockchain.GetBlockByNumber(block.NumberU64() + 1); block == nil {
 			return nil, nil, fmt.Errorf("block #%d not found", block.NumberU64()+1)
 		}
-		feeCapacity := state.GetTRC21FeeCapacityFromState(statedb)
+		var contractList []common.Address
+		for _, tx := range block.Transactions() {
+			if tx.To() != nil && !slices.Contains(contractList, *tx.To()) {
+				contractList = append(contractList, *tx.To())
+			}
+		}
+
+		feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(statedb, contractList)
 		_, _, _, err := api.eth.blockchain.Processor().Process(block, statedb, tomoxState, vm.Config{}, feeCapacity)
 		if err != nil {
 			return nil, nil, err
@@ -667,7 +672,14 @@ func (api *PrivateDebugAPI) computeTxEnv(blockHash common.Hash, txIndex int, ree
 		return nil, vm.Context{}, nil, err
 	}
 	// Recompute transactions up to the target index.
-	feeCapacity := state.GetTRC21FeeCapacityFromState(statedb)
+	var contractList []common.Address
+	for _, tx := range block.Transactions() {
+		if tx.To() != nil && !slices.Contains(contractList, *tx.To()) {
+			contractList = append(contractList, *tx.To())
+		}
+	}
+
+	feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(statedb, contractList)
 	if common.TIPSigningBlock.Cmp(block.Header().Number) == 0 {
 		statedb.DeleteAddress(common.HexToAddress(common.BlockSigners))
 	}
