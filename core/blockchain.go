@@ -1991,7 +1991,14 @@ func (bc *BlockChain) getResultBlock(block *types.Block, verifiedM2 bool) (*Resu
 			}
 		}
 	}
-	feeCapacity := state.GetTRC21FeeCapacityFromStateWithCache(parent.Root(), statedb)
+	var contractList []common.Address
+	for _, tx := range block.Transactions() {
+		if tx.To() != nil && !slices.Contains(contractList, *tx.To()) {
+			contractList = append(contractList, *tx.To())
+		}
+	}
+
+	feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(statedb, contractList)
 	// Process block using the parent state as reference point.
 	receipts, logs, usedGas, err := bc.processor.ProcessBlockNoValidator(calculatedBlock, statedb, tradingState, bc.vmConfig, feeCapacity)
 	process := time.Since(bstart)
