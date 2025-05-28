@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"sort"
 	"time"
 
@@ -195,7 +196,15 @@ func regenerateState(
 		if block = blockchain.GetBlockByNumber(block.NumberU64() + 1); block == nil {
 			return nil, nil, fmt.Errorf("block #%d not found", block.NumberU64()+1)
 		}
-		feeCapacity := state.GetTRC21FeeCapacityFromState(stateDB)
+
+		var contractList []common.Address
+		for _, tx := range block.Transactions() {
+			if tx.To() != nil && !slices.Contains(contractList, *tx.To()) {
+				contractList = append(contractList, *tx.To())
+			}
+		}
+
+		feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(stateDB, contractList)
 		_, _, _, err := blockchain.Processor().Process(block, stateDB, tomoxStateDB, vm.Config{}, feeCapacity)
 		if err != nil {
 			return nil, nil, err
@@ -247,7 +256,14 @@ func finaliseBlock(
 		txs    = targetBlock.Transactions()
 	)
 
-	feeCapacity := state.GetTRC21FeeCapacityFromState(stateDB)
+	var contractList []common.Address
+	for _, tx := range targetBlock.Transactions() {
+		if tx.To() != nil && !slices.Contains(contractList, *tx.To()) {
+			contractList = append(contractList, *tx.To())
+		}
+	}
+
+	feeCapacity := state.GetTRC21FeeCapacityFromStateEffective(stateDB, contractList)
 	for _, tx := range txs {
 		var balance *big.Int
 		if tx.To() != nil {
